@@ -573,25 +573,14 @@ impl<'a> Normalize<'a> for StrLiteral<'a> {
             StrLiteral::PlainLine(t) => StrLiteral::PlainLine(t),
             StrLiteral::Line(t) => {
                 let mut new_segments = Vec::new_in(arena);
-                let mut last_text = String::new_in(arena);
-
-                normalize_str_segments(arena, t, &mut last_text, &mut new_segments);
-                if !last_text.is_empty() {
-                    new_segments.push(StrSegment::Plaintext(last_text.into_bump_str()));
-                }
-
+                normalize_str_segments(arena, t, &mut new_segments);
                 normalize_str_line(new_segments)
             }
             StrLiteral::Block(t) => {
                 let mut new_segments = Vec::new_in(arena);
-                let mut last_text = String::new_in(arena);
                 for line in t {
-                    normalize_str_segments(arena, line, &mut last_text, &mut new_segments);
+                    normalize_str_segments(arena, line, &mut new_segments);
                 }
-                if !last_text.is_empty() {
-                    new_segments.push(StrSegment::Plaintext(last_text.into_bump_str()));
-                }
-
                 normalize_str_line(new_segments)
             }
         }
@@ -611,30 +600,58 @@ fn normalize_str_line<'a>(new_segments: Vec<'a, StrSegment<'a>>) -> StrLiteral<'
 fn normalize_str_segments<'a>(
     arena: &'a Bump,
     segments: &[StrSegment<'a>],
-    last_text: &mut String<'a>,
+    // last_text: &mut String<'a>,
     new_segments: &mut Vec<'a, StrSegment<'a>>,
 ) {
+    if segments.is_empty() {
+        return;
+    }
+    let mut last_text = String::new_in(arena);
+    // represents the location spanned by last_text
+    let mut start = segments[0].loc().start();
+    let mut end = segments[0].loc().end();
     for segment in segments.iter() {
         match segment {
             StrSegment::Plaintext(t) => {
-                last_text.push_str(t);
+                last_text.push_str(t.value);
+                if last_text.is_empty() {
+                    start = segment.loc().start();
+                }
+                end = t.region.end();
             }
             StrSegment::Unicode(t) => {
                 let hex_code: &str = t.value;
                 let c = char::from_u32(u32::from_str_radix(hex_code, 16).unwrap()).unwrap();
                 last_text.push(c);
+                if last_text.is_empty() {
+                    start = segment.loc().start();
+                }
+                end = t.region.end();
             }
             StrSegment::EscapedChar(c) => {
-                last_text.push(c.unescape());
+                last_text.push(c.value.unescape());
+                if last_text.is_empty() {
+                    start = segment.loc().start();
+                }
+                end = c.region.end();
             }
             StrSegment::Interpolated(e) => {
                 if !last_text.is_empty() {
-                    let text = std::mem::replace(last_text, String::new_in(arena));
-                    new_segments.push(StrSegment::Plaintext(text.into_bump_str()));
+                    let text = std::mem::replace(&mut last_text, String::new_in(arena));
+                    new_segments.push(StrSegment::Plaintext(Loc::at(
+                        Region::new(start, end),
+                        text.into_bump_str(),
+                    )));
                 }
                 new_segments.push(StrSegment::Interpolated(e.normalize(arena)));
             }
         }
+    }
+    if !last_text.is_empty() {
+        new_segments.push(StrSegment::Plaintext(Loc::at(
+            Region::new(start, end),
+            last_text.into_bump_str(),
+        )));
     }
 }
 

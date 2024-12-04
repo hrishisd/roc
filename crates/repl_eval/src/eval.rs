@@ -429,7 +429,7 @@ fn jit_to_ast_help<'a, A: ReplApp<'a>>(
             let body = |mem: &A::Memory, addr| {
                 let string = mem.deref_str(addr);
                 let arena_str = env.arena.alloc_str(string);
-                Expr::Str(StrLiteral::PlainLine(arena_str))
+                Expr::Str(StrLiteral::PlainLine(Loc::at(Region::zero(), arena_str)))
             };
 
             match app.call_function_returns_roc_str(env.target, main_fn_name, body) {
@@ -652,7 +652,7 @@ fn addr_to_ast<'a, M: ReplAppMemory>(
         (_, LayoutRepr::Builtin(Builtin::Str)) => {
             let string = mem.deref_str(addr);
             let arena_str = env.arena.alloc_str(string);
-            Expr::Str(StrLiteral::PlainLine(arena_str))
+            Expr::Str(StrLiteral::PlainLine(Loc::at(Region::zero(), arena_str)))
         }
         (_, LayoutRepr::Struct (field_layouts)) => match raw_content {
             Content::Structure(FlatType::Record(fields, _)) => {

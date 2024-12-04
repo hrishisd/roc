@@ -663,7 +663,7 @@ pub fn is_str_multiline(literal: &StrLiteral) -> bool {
     match literal {
         PlainLine(string) => {
             // When a PlainLine contains '\n' or '"', format as a block string
-            string.contains('"') || string.contains('\n')
+            string.value.contains('"') || string.value.contains('\n')
         }
         Line(_) => {
             // If this had any newlines, it'd have parsed as Block.
@@ -748,12 +748,12 @@ fn format_str_segment(seg: &StrSegment, buf: &mut Buf, indent: u16) {
         Plaintext(string) => {
             // Lines in block strings will end with Plaintext ending in "\n" to indicate
             // a line break in the input string
-            match string.strip_suffix('\n') {
+            match string.value.strip_suffix('\n') {
                 Some(string_without_newline) => {
                     fmt_str_body(string_without_newline, buf);
                     buf.newline();
                 }
-                None => fmt_str_body(string, buf),
+                None => fmt_str_body(string.value, buf),
             }
         }
         Unicode(loc_str) => {
@@ -763,7 +763,7 @@ fn format_str_segment(seg: &StrSegment, buf: &mut Buf, indent: u16) {
         }
         EscapedChar(escaped) => {
             buf.push('\\');
-            buf.push(escaped.to_parsed_char());
+            buf.push(escaped.value.to_parsed_char());
         }
         Interpolated(loc_expr) => {
             buf.push_str("$(");
@@ -804,7 +804,7 @@ pub fn fmt_str_literal(buf: &mut Buf, literal: StrLiteral, indent: u16) {
     use roc_parse::ast::StrLiteral::*;
 
     match literal {
-        PlainLine(string) => {
+        PlainLine(Loc { value: string, .. }) => {
             // When a PlainLine contains '\n' or '"', format as a block string
             if string.contains('"') || string.contains('\n') {
                 buf.ensure_ends_with_newline();
@@ -843,7 +843,7 @@ pub fn fmt_str_literal(buf: &mut Buf, literal: StrLiteral, indent: u16) {
             for segments in lines.iter() {
                 for seg in segments.iter() {
                     // only add indent if the line isn't empty
-                    if *seg != StrSegment::Plaintext("\n") {
+                    if !matches!(seg, StrSegment::Plaintext(Loc { value: "\n", .. })) {
                         buf.indent(indent);
                         format_str_segment(seg, buf, indent);
                     } else {

@@ -228,7 +228,7 @@ impl ReplState {
                                 },
                                 ValueDef::IngestedFileImport(file) => {
                                     if let StrLiteral::PlainLine(path) = file.path.value {
-                                        let filename = PathBuf::from(path);
+                                        let filename = PathBuf::from(path.value);
                                         if let Err(err) = fs::metadata(&filename) {
                                             return ReplAction::FileProblem {
                                                 filename,

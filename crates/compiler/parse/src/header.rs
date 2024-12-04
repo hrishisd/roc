@@ -1352,7 +1352,7 @@ pub fn package_name<'a>() -> impl Parser<'a, PackageName<'a>, EPackageName<'a>> 
             string_literal::parse_str_literal(),
         )),
         move |_arena, state, progress, text| match text.value {
-            StrLiteral::PlainLine(text) => Ok((progress, PackageName(text), state)),
+            StrLiteral::PlainLine(text) => Ok((progress, PackageName(text.value), state)),
             StrLiteral::Line(_) => Err((progress, EPackageName::Escapes(text.region.start()))),
             StrLiteral::Block(_) => Err((progress, EPackageName::Multiline(text.region.start()))),
         },

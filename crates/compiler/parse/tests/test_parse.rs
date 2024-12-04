@@ -82,7 +82,7 @@ mod test_parse {
     fn string_with_escaped_char_at_end() {
         parses_with_escaped_char(
             |esc| format!(r#""abcd{esc}""#),
-            |esc, arena| bumpalo::vec![in arena;  Plaintext("abcd"), EscapedChar(esc)],
+            |esc, arena| bumpalo::vec![in arena;  Plaintext(Loc::new(0,3,"abcd")), EscapedChar(Loc::new(5,5,esc))],
         );
     }
 
@@ -90,7 +90,7 @@ mod test_parse {
     fn string_with_escaped_char_in_front() {
         parses_with_escaped_char(
             |esc| format!(r#""{esc}abcd""#),
-            |esc, arena| bumpalo::vec![in arena; EscapedChar(esc), Plaintext("abcd")],
+            |esc, arena| bumpalo::vec![in arena; EscapedChar(Loc::new(0,0,esc)), Plaintext(Loc::new(1,4,"abcd"))],
         );
     }
 
@@ -98,7 +98,7 @@ mod test_parse {
     fn string_with_escaped_char_in_middle() {
         parses_with_escaped_char(
             |esc| format!(r#""ab{esc}cd""#),
-            |esc, arena| bumpalo::vec![in arena; Plaintext("ab"), EscapedChar(esc), Plaintext("cd")],
+            |esc, arena| bumpalo::vec![in arena; Plaintext(Loc::new(0,1,"ab")), EscapedChar(Loc::new(2,2,esc)), Plaintext(Loc::new(3,4,"cd"))],
         );
     }
 
@@ -106,7 +106,7 @@ mod test_parse {
     fn string_with_multiple_escaped_chars() {
         parses_with_escaped_char(
             |esc| format!(r#""{esc}abc{esc}de{esc}fghi{esc}""#),
-            |esc, arena| bumpalo::vec![in arena; EscapedChar(esc), Plaintext("abc"), EscapedChar(esc), Plaintext("de"), EscapedChar(esc), Plaintext("fghi"), EscapedChar(esc)],
+            |esc, arena| bumpalo::vec![in arena; EscapedChar(Loc::new(0,0,esc)), Plaintext(Loc::new(1,4,"abc")), EscapedChar(Loc::new(0,0,esc)), Plaintext(Loc::new(0,0,"de")), EscapedChar(Loc::new(0,0,esc)), Plaintext(Loc::new(0,0,"fghi")), EscapedChar(Loc::new(0,0,esc))],
         );
     }
 
@@ -116,9 +116,9 @@ mod test_parse {
     fn unicode_escape_in_middle() {
         assert_segments(r#""Hi, \u(123)!""#, |arena| {
             bumpalo::vec![in arena;
-                 Plaintext("Hi, "),
+                 Plaintext(Loc::new(0,3,"Hi, ")),
                  Unicode(Loc::new(8, 11, "123")),
-                 Plaintext("!")
+                 Plaintext(Loc::new(13,13,"!"))
             ]
         });
     }
@@ -128,7 +128,7 @@ mod test_parse {
         assert_segments(r#""\u(1234) is a unicode char""#, |arena| {
             bumpalo::vec![in arena;
                  Unicode(Loc::new(4, 8, "1234")),
-                 Plaintext(" is a unicode char")
+                 Plaintext(Loc::new(6, 23," is a unicode char"))
             ]
         });
     }
@@ -137,7 +137,7 @@ mod test_parse {
     fn unicode_escape_in_back() {
         assert_segments(r#""this is unicode: \u(1)""#, |arena| {
             bumpalo::vec![in arena;
-                 Plaintext("this is unicode: "),
+                 Plaintext(Loc::new(0,17,"this is unicode: ")),
                  Unicode(Loc::new(21, 22, "1"))
             ]
         });
@@ -148,9 +148,9 @@ mod test_parse {
         assert_segments(r#""\u(a1) this is \u(2Bcd) unicode \u(ef97)""#, |arena| {
             bumpalo::vec![in arena;
                  Unicode(Loc::new(4, 6, "a1")),
-                 Plaintext(" this is "),
+                 Plaintext(Loc::new(0,0," this is ")),
                  Unicode(Loc::new(19, 23, "2Bcd")),
-                 Plaintext(" unicode "),
+                 Plaintext(Loc::new(0,0," unicode ")),
                  Unicode(Loc::new(36, 40, "ef97"))
             ]
         });
@@ -162,9 +162,9 @@ mod test_parse {
     fn escaped_interpolation() {
         assert_segments(r#""Hi, \$(name)!""#, |arena| {
             bumpalo::vec![in arena;
-                 Plaintext("Hi, "),
-                 EscapedChar(EscapedChar::Dollar),
-                 Plaintext("(name)!"),
+                Plaintext(Loc::new(0,0,"Hi, ")),
+                EscapedChar(Loc::new(0,0,EscapedChar::Dollar)),
+                Plaintext(Loc::new(0,0,"(name)!")),
             ]
         });
     }
@@ -178,9 +178,9 @@ mod test_parse {
             });
 
             bumpalo::vec![in arena;
-                 Plaintext("Hi, "),
-                 Interpolated(Loc::new(7, 11, expr)),
-                 Plaintext("!")
+                Plaintext(Loc::new(0,0,"Hi, ")),
+                Interpolated(Loc::new(7, 11, expr)),
+                Plaintext(Loc::new(0,0,"!"))
             ]
         });
     }
@@ -195,7 +195,7 @@ mod test_parse {
 
             bumpalo::vec![in arena;
                  Interpolated(Loc::new(3, 7, expr)),
-                 Plaintext(", hi!")
+                 Plaintext(Loc::new(0,0,", hi!"))
             ]
         });
     }
@@ -205,7 +205,7 @@ mod test_parse {
         let arena = Bump::new();
 
         assert_eq!(
-            Ok(Expr::Str(PlainLine("$"))),
+            Ok(Expr::Str(PlainLine(Loc::new(0, 0, "$")))),
             parse_expr_with(&arena, arena.alloc(r#""$""#))
         );
     }
@@ -215,7 +215,7 @@ mod test_parse {
         let arena = Bump::new();
 
         assert_eq!(
-            Ok(Expr::Str(PlainLine("$foo"))),
+            Ok(Expr::Str(PlainLine(Loc::new(0, 0, "$foo")))),
             parse_expr_with(&arena, arena.alloc(r#""$foo""#))
         );
     }
@@ -225,7 +225,7 @@ mod test_parse {
         let arena = Bump::new();
 
         assert_eq!(
-            Ok(Expr::Str(PlainLine("foo$"))),
+            Ok(Expr::Str(PlainLine(Loc::new(0, 0, "foo$")))),
             parse_expr_with(&arena, arena.alloc(r#""foo$""#))
         );
     }
@@ -239,7 +239,7 @@ mod test_parse {
             });
 
             bumpalo::vec![in arena;
-                 Plaintext("Hello "),
+                 Plaintext(Loc::new(0,0,"Hello ")),
                  Interpolated(Loc::new(9, 13, expr))
             ]
         });
@@ -259,11 +259,11 @@ mod test_parse {
             });
 
             bumpalo::vec![in arena;
-                 Plaintext("Hi, "),
+                Plaintext(Loc::new(0,0,"Hi, ")),
                  Interpolated(Loc::new(7, 11, expr1)),
-                 Plaintext("! How is "),
+                 Plaintext(Loc::new(0,0,"! How is ")),
                  Interpolated(Loc::new(23, 30, expr2)),
-                 Plaintext(" going?")
+                 Plaintext(Loc::new(0,0," going?"))
             ]
         });
     }
@@ -284,11 +284,11 @@ mod test_parse {
                 });
 
                 bumpalo::vec![in arena;
-                     Plaintext("$a Hi, "),
+                    Plaintext(Loc::new(0,0,"$a Hi, ")),
                      Interpolated(Loc::new(10, 14, expr1)),
-                     Plaintext("! $b How is "),
+                     Plaintext(Loc::new(0,0,"! $b How is ")),
                      Interpolated(Loc::new(29, 36, expr2)),
-                     Plaintext(" going? $c")
+                     Plaintext(Loc::new(0,0," going? $c"))
                 ]
             },
         );

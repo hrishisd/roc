@@ -2620,10 +2620,15 @@ fn flatten_str_literal<'a>(
     use ast::StrLiteral::*;
 
     match literal {
-        PlainLine(str_slice) => (Expr::Str((*str_slice).into()), Output::default()),
+        PlainLine(str_slice) => (Expr::Str((*str_slice.value).into()), Output::default()),
         Line(segments) => flatten_str_lines(env, var_store, scope, &[segments]),
         Block(lines) => flatten_str_lines(env, var_store, scope, lines),
     }
+}
+
+fn _has_invisible_unicode_chars(s: &str) -> bool {
+    //TODO: add more characters
+    s.chars().any(|c| c == '\u{feff}')
 }
 
 /// Comments, newlines, and nested interpolation are disallowed inside interpolation
@@ -2771,7 +2776,7 @@ fn flatten_str_lines<'a>(
         for segment in line.iter() {
             match segment {
                 Plaintext(string) => {
-                    buf.push_str(string);
+                    buf.push_str(string.value);
                 }
                 Unicode(loc_hex_digits) => match u32::from_str_radix(loc_hex_digits.value, 16) {
                     Ok(code_pt) => match char::from_u32(code_pt) {
@@ -2831,7 +2836,7 @@ fn flatten_str_lines<'a>(
                         );
                     }
                 }
-                EscapedChar(escaped) => buf.push(escaped.unescape()),
+                EscapedChar(escaped) => buf.push(escaped.value.unescape()),
             }
         }
     }

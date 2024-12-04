@@ -1465,6 +1465,7 @@ pub fn can_problem<'b>(
 
             title = UNNECESSARY_EXCLAMATION.to_string();
         }
+        Problem::InvisibleUnicodeCharacter(region) => todo!(),
     };
 
     Report {

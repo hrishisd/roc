@@ -1090,7 +1090,7 @@ fn flatten_str_literal(literal: &StrLiteral<'_>) -> Pattern {
     use ast::StrLiteral::*;
 
     match literal {
-        PlainLine(str_slice) => Pattern::StrLiteral((*str_slice).into()),
+        PlainLine(str_slice) => Pattern::StrLiteral((*str_slice.value).into()),
         Line(segments) => flatten_str_lines(&[segments]),
         Block(lines) => flatten_str_lines(lines),
     }
@@ -1105,7 +1105,7 @@ fn flatten_str_lines(lines: &[&[StrSegment<'_>]]) -> Pattern {
         for segment in line.iter() {
             match segment {
                 Plaintext(string) => {
-                    buf.push_str(string);
+                    buf.push_str(string.value);
                 }
                 Unicode(loc_digits) => {
                     todo!("parse unicode digits {:?}", loc_digits);
@@ -1113,7 +1113,7 @@ fn flatten_str_lines(lines: &[&[StrSegment<'_>]]) -> Pattern {
                 Interpolated(loc_expr) => {
                     return Pattern::UnsupportedPattern(loc_expr.region);
                 }
-                EscapedChar(escaped) => buf.push(escaped.unescape()),
+                EscapedChar(escaped) => buf.push(escaped.value.unescape()),
             }
         }
     }

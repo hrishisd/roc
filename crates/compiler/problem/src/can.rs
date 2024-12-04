@@ -254,6 +254,7 @@ pub enum Problem {
     StmtAfterExpr(Region),
     UnsuffixedEffectfulRecordField(Region),
     SuffixedPureRecordField(Region),
+    InvisibleUnicodeCharacter(Region),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -342,6 +343,7 @@ impl Problem {
             Problem::UnsuffixedEffectfulRecordField(_) | Problem::SuffixedPureRecordField(..) => {
                 Warning
             }
+            Problem::InvisibleUnicodeCharacter(_) => Warning,
         }
     }
 
@@ -514,7 +516,9 @@ impl Problem {
                 cycle_entries.first().map(|entry| entry.expr_region)
             }
 
-            Problem::StmtAfterExpr(region) => Some(*region),
+            Problem::StmtAfterExpr(region) | Problem::InvisibleUnicodeCharacter(region) => {
+                Some(*region)
+            }
             Problem::RuntimeError(RuntimeError::UnresolvedTypeVar)
             | Problem::RuntimeError(RuntimeError::ErroneousType)
             | Problem::RuntimeError(RuntimeError::NonExhaustivePattern)

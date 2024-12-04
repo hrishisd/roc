@@ -297,9 +297,9 @@ fn add_ingested_files<W: Write>(
     RecursiveValueDefIter::new(&defs).try_for_each(|(def, _)| {
         if let ValueDef::IngestedFileImport(IngestedFileImport { path, .. }) = def {
             if let StrLiteral::PlainLine(relative_path_str) = path.value {
-                let relative_path: PathBuf = relative_path_str.into();
+                let relative_path: PathBuf = relative_path_str.value.into();
 
-                if relative_path_str.contains("..") {
+                if relative_path_str.value.contains("..") {
                     panic!(
                         "Cannot bundle {} (imported in {}) since it contains a relative `..` which would access files outside {}.",
                         &relative_path.display(),

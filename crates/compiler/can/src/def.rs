@@ -2500,7 +2500,7 @@ fn canonicalize_pending_value_def<'a>(
             let mut file_path: PathBuf = env.module_path.into();
             // Remove the header file name and push the new path.
             file_path.pop();
-            file_path.push(relative_path);
+            file_path.push(relative_path.value);
 
             let mut bytes = vec![];
 

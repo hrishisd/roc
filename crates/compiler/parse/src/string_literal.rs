@@ -8,6 +8,7 @@ use crate::parser::{
 use crate::state::State;
 use bumpalo::collections::vec::Vec;
 use bumpalo::Bump;
+use roc_region::all::{Loc, Region};
 
 /// One or more ASCII hex digits. (Useful when parsing unicode escape codes,
 /// which must consist entirely of ASCII hex digits.)
@@ -90,12 +91,9 @@ pub fn parse_str_like_literal<'a>() -> impl Parser<'a, StrLikeLiteral<'a>, EStri
         let is_single_quote;
 
         let indent = state.column();
-
-        let start_state;
+        let start_state = state.clone();
 
         if state.consume_mut("\"\"\"") {
-            start_state = state.clone();
-
             // we will be parsing a multi-line string
             is_multiline = true;
             is_single_quote = false;
@@ -104,14 +102,10 @@ pub fn parse_str_like_literal<'a>() -> impl Parser<'a, StrLikeLiteral<'a>, EStri
                 state = consume_indent(state, indent)?;
             }
         } else if state.consume_mut("\"") {
-            start_state = state.clone();
-
             // we will be parsing a single-line string
             is_multiline = false;
             is_single_quote = false;
         } else if state.consume_mut("'") {
-            start_state = state.clone();
-
             is_multiline = false;
             is_single_quote = true;
         } else {
@@ -125,11 +119,15 @@ pub fn parse_str_like_literal<'a>() -> impl Parser<'a, StrLikeLiteral<'a>, EStri
 
         macro_rules! escaped_char {
             ($ch:expr) => {
-                // Record the escaped char.
-                segments.push(StrSegment::EscapedChar($ch));
+                let start_pos = state.pos();
 
                 // Advance past the segment we just added
                 state.advance_mut(segment_parsed_bytes);
+                let end_pos = state.pos();
+                let loc = Loc::at(Region::new(start_pos, end_pos), $ch);
+
+                // Record the escaped char.
+                segments.push(StrSegment::EscapedChar(loc));
 
                 // Reset the segment
                 segment_parsed_bytes = 0;
@@ -148,9 +146,11 @@ pub fn parse_str_like_literal<'a>() -> impl Parser<'a, StrLikeLiteral<'a>, EStri
 
                     match std::str::from_utf8(string_bytes) {
                         Ok(string) => {
+                            let start_pos = state.pos();
                             state.advance_mut(string.len());
-
-                            segments.push($transform(string));
+                            let end_pos = state.pos();
+                            let loc = Loc::at(Region::new(start_pos, end_pos), string);
+                            segments.push($transform(loc));
                         }
                         Err(_) => {
                             return Err((
@@ -181,6 +181,7 @@ pub fn parse_str_like_literal<'a>() -> impl Parser<'a, StrLikeLiteral<'a>, EStri
 
             match one_byte {
                 b'"' if !is_single_quote => {
+                    // empty string
                     if segment_parsed_bytes == 1 && segments.is_empty() {
                         // special case of the empty string
                         if is_multiline {
@@ -197,9 +198,10 @@ pub fn parse_str_like_literal<'a>() -> impl Parser<'a, StrLikeLiteral<'a>, EStri
                         } else {
                             // This is the end of the string!
                             // Advance 1 for the close quote
+                            let loc = Loc::at(Region::from_pos(state.pos()), "");
                             return Ok((
                                 MadeProgress,
-                                StrLikeLiteral::Str(StrLiteral::PlainLine("")),
+                                StrLikeLiteral::Str(StrLiteral::PlainLine(loc)),
                                 state.advance(1),
                             ));
                         }
@@ -258,7 +260,9 @@ pub fn parse_str_like_literal<'a>() -> impl Parser<'a, StrLikeLiteral<'a>, EStri
                         // We had exactly one segment, so this is a candidate
                         // to be SingleQuoteLiteral::Plaintext
                         match segments.pop().unwrap() {
-                            StrSegment::Plaintext(string) => SingleQuoteLiteral::PlainLine(string),
+                            StrSegment::Plaintext(string) => {
+                                SingleQuoteLiteral::PlainLine(string.value)
+                            }
                             other => {
                                 let o = other.try_into().map_err(|e| {
                                     (
@@ -322,21 +326,25 @@ pub fn parse_str_like_literal<'a>() -> impl Parser<'a, StrLikeLiteral<'a>, EStri
                         let without_newline = &state.bytes()[0..(segment_parsed_bytes - 1)];
                         let with_newline = &state.bytes()[0..segment_parsed_bytes];
 
+                        let segment_start = state.pos();
                         state.advance_mut(segment_parsed_bytes);
+                        let segment_region = Region::between(segment_start, state.pos());
                         state = consume_indent(state, indent)?;
                         bytes = state.bytes().iter();
 
                         if state.bytes().starts_with(b"\"\"\"") {
                             // ending the string; don't use the last newline
                             if !without_newline.is_empty() {
-                                segments.push(StrSegment::Plaintext(utf8(
-                                    state.clone(),
-                                    without_newline,
-                                )?));
+                                // TODO: hrishi need to wrap segments in location information
+                                // How does state get updated after parsing the segment?
+                                let s = utf8(state.clone(), without_newline)?;
+                                segments.push(StrSegment::Plaintext(Loc::at(segment_region, s)));
                             }
                         } else {
-                            segments
-                                .push(StrSegment::Plaintext(utf8(state.clone(), with_newline)?));
+                            segments.push(StrSegment::Plaintext(Loc::at(
+                                segment_region,
+                                utf8(state.clone(), with_newline)?,
+                            )));
                         }
 
                         segment_parsed_bytes = 0;
@@ -431,12 +439,14 @@ pub fn parse_str_like_literal<'a>() -> impl Parser<'a, StrLikeLiteral<'a>, EStri
                     if segment_parsed_bytes > 2 {
                         // exclude the 2 chars we just parsed, namely '$' and '('
                         let string_bytes = &state.bytes()[0..(segment_parsed_bytes - 2)];
+                        let segment_start = state.pos();
 
                         match std::str::from_utf8(string_bytes) {
                             Ok(string) => {
                                 state.advance_mut(string.len());
-
-                                segments.push(StrSegment::Plaintext(string));
+                                let segment_region = Region::between(segment_start, state.pos());
+                                segments
+                                    .push(StrSegment::Plaintext(Loc::at(segment_region, string)));
                             }
                             Err(_) => {
                                 return Err((

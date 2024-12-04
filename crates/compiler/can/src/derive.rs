@@ -251,7 +251,10 @@ fn to_inspector<'a>(env: &mut Env<'a>, at_opaque: &'a str) -> ast::Expr<'a> {
     let to_inspector_list = alloc_expr(ast::Expr::List(Collection::with_items(
         &*env.arena.alloc([&*to_inspector_payload]),
     )));
-    let opaque_name = alloc_expr(ast::Expr::Str(ast::StrLiteral::PlainLine(at_opaque)));
+    let opaque_name = alloc_expr(ast::Expr::Str(ast::StrLiteral::PlainLine(Loc::at(
+        DERIVED_REGION,
+        at_opaque,
+    ))));
 
     let opaque_inspector = alloc_expr(ast::Expr::Apply(
         alloc_expr(ast::Expr::Var {

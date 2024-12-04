@@ -296,12 +296,24 @@ pub struct WhenPattern<'a> {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum StrSegment<'a> {
-    Plaintext(&'a str),              // e.g. "foo"
+    Plaintext(Loc<&'a str>),         // e.g. "foo"
     Unicode(Loc<&'a str>),           // e.g. "00A0" in "\u(00A0)"
-    EscapedChar(EscapedChar),        // e.g. '\n' in "Hello!\n"
+    EscapedChar(Loc<EscapedChar>),   // e.g. '\n' in "Hello!\n"
     Interpolated(Loc<&'a Expr<'a>>), // e.g. "$(expr)"
 }
 
+impl<'a> StrSegment<'a> {
+    pub fn loc(&self) -> Region {
+        match self {
+            StrSegment::Plaintext(Loc { region, .. })
+            | StrSegment::Unicode(Loc { region, .. })
+            | StrSegment::EscapedChar(Loc { region, .. })
+            | StrSegment::Interpolated(Loc { region, .. }) => *region,
+        }
+    }
+}
+
+// TODO: maybe check for invisible characters here as well?
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SingleQuoteSegment<'a> {
     Plaintext(&'a str),    // e.g. 'f'
@@ -389,9 +401,9 @@ impl<'a> TryFrom<StrSegment<'a>> for SingleQuoteSegment<'a> {
 
     fn try_from(value: StrSegment<'a>) -> Result<Self, Self::Error> {
         match value {
-            StrSegment::Plaintext(s) => Ok(SingleQuoteSegment::Plaintext(s)),
+            StrSegment::Plaintext(s) => Ok(SingleQuoteSegment::Plaintext(s.value)),
             StrSegment::Unicode(s) => Ok(SingleQuoteSegment::Unicode(s)),
-            StrSegment::EscapedChar(s) => Ok(SingleQuoteSegment::EscapedChar(s)),
+            StrSegment::EscapedChar(s) => Ok(SingleQuoteSegment::EscapedChar(s.value)),
             StrSegment::Interpolated(_) => Err(ESingleQuote::InterpolationNotAllowed),
         }
     }
@@ -400,7 +412,7 @@ impl<'a> TryFrom<StrSegment<'a>> for SingleQuoteSegment<'a> {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum StrLiteral<'a> {
     /// The most common case: a plain string with no escapes or interpolations
-    PlainLine(&'a str),
+    PlainLine(Loc<&'a str>),
     Line(&'a [StrSegment<'a>]),
     Block(&'a [&'a [StrSegment<'a>]]),
 }
